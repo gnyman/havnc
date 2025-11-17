@@ -80,6 +80,35 @@
                            "jsunzip.js", "rfb.js", "keysym.js"]);
 
         var rfb;
+        var reconnectTimer = null;
+        var connectionParams = {
+            host: null,
+            port: null,
+            password: null,
+            path: null
+        };
+
+        function attemptReconnect() {
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+
+            updateState(rfb, 'reconnecting', '', 'Attempting to reconnect...');
+
+            rfb = new RFB({'target':       $D('noVNC_canvas'),
+                           'encrypt':      WebUtil.getQueryVar('encrypt',
+                                    (window.location.protocol === "https:")),
+                           'repeaterID':   WebUtil.getQueryVar('repeaterID', ''),
+                           'true_color':   WebUtil.getQueryVar('true_color', true),
+                           'local_cursor': WebUtil.getQueryVar('cursor', true),
+                           'shared':       WebUtil.getQueryVar('shared', true),
+                           'view_only':    WebUtil.getQueryVar('view_only', false),
+                           'onUpdateState':  updateState,
+                           'onXvpInit':    xvpInit,
+                           'onPasswordRequired':  passwordRequired});
+            rfb.connect(connectionParams.host, connectionParams.port, connectionParams.password, connectionParams.path);
+        }
 
         function passwordRequired(rfb) {
             var msg;
@@ -128,10 +157,29 @@
             if (state === "normal") {
                 cad.disabled = false;
 		s.parentElement.parentElement.style.display = 'none';
+                // Clear any pending reconnect timer when successfully connected
+                if (reconnectTimer) {
+                    clearTimeout(reconnectTimer);
+                    reconnectTimer = null;
+                }
             } else {
 		s.parentElement.parentElement.style.display = 'block';
                 cad.disabled = true;
                 xvpInit(0);
+            }
+
+            // Schedule auto-reconnect for disconnected or failed states
+            if ((state === 'disconnected' || state === 'failed') && connectionParams.host) {
+                if (reconnectTimer) {
+                    clearTimeout(reconnectTimer);
+                }
+                reconnectTimer = setTimeout(function() {
+                    attemptReconnect();
+                }, 60000); // 60 seconds = 1 minute
+
+                if (typeof(msg) !== 'undefined') {
+                    msg += ' - Will retry in 60 seconds...';
+                }
             }
 
             if (typeof(msg) !== 'undefined') {
@@ -191,6 +239,12 @@
                     "Must specify host and port in URL");
                 return;
             }
+
+            // Store connection parameters for auto-reconnect
+            connectionParams.host = host;
+            connectionParams.port = port;
+            connectionParams.password = password;
+            connectionParams.path = path;
 
             rfb = new RFB({'target':       $D('noVNC_canvas'),
                            'encrypt':      WebUtil.getQueryVar('encrypt',
