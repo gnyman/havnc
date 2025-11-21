@@ -1,6 +1,6 @@
 name: "HAVNC"
 description: "VNC straight to your dashboard"
-version: "0.0.9"
+version: "0.1.0"
 slug: "havnc"
 init: false
 full_access: false
@@ -20,3 +20,4 @@ schema:
   url: "str"
   resolution: "str"
   password: "password"
+image: "ghcr.io/gnyman/{arch}-ha-addons"
