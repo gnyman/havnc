@@ -1,7 +1,7 @@
-name: "HAVNC"
-description: "VNC straight to your dashboard"
-version: "0.1.0"
-slug: "havnc"
+name: "HAVNC-DRAGONS"
+description: "VNC straight to your dashboard - here be dragons version (also known as bleeding edge, might not work)"
+version: "0.1.1"
+slug: "havnc-dragons"
 init: false
 full_access: false
 arch:
@@ -22,4 +22,4 @@ schema:
   resolution: "str"
   password: "password"
   persist_data: "bool"
-image: "ghcr.io/gnyman/{arch}-ha-addons"
+image: "ghcr.io/gnyman/{arch}-havnc-dragons"
