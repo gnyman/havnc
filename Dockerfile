@@ -9,7 +9,7 @@ ENV LANG=en_US.UTF-8 \
 	TZ="UTC"
 
 RUN	apk update && \
-	apk add --no-cache tzdata ca-certificates supervisor curl wget openssl bash python3 py3-requests sed unzip xvfb tigervnc websockify openbox chromium nss alsa-lib font-noto font-noto-cjk jq git procps
+	apk add --no-cache tzdata ca-certificates supervisor curl chromium wget openssl bash python3 py3-requests sed unzip xvfb tigervnc websockify openbox luakit nss alsa-lib font-noto font-noto-cjk jq git procps
 
 # TimeZone
 RUN	cp /usr/share/zoneinfo/$TZ /etc/localtime && \
