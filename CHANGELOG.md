@@ -2,6 +2,12 @@
 
 Notable and less notable changes. 
 
+## [0.1.2-DRAGON]
+
+Added more browser choices and made them selectable from the configuration page. From my testing firefox sometimes performs better than chrome, but it depends on what the dashboard does. Now you can test.
+
+Depending on the feedback I might or might not include all the browsers, they make the image quite big and really slow to install on my pi4.
+
 ## [0.1.1]
 
 - Now available in a repository for easy install and updating, https://github.com/gnyman/ha-addons

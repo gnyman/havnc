@@ -9,8 +9,11 @@ configuration:
     name: Password to access VNC (mandatory)
     description: A password used to access VNC. Sent over clear text on your network so don't pick one you like to keep secret. You can make VNC auto login by adding it at the end when accessing the VNC viewer. Like http://homeassistant.local:8080/?password=yoursupersecretpassword
   persist_data:
-    name: Persist Browser Data (NEW)
+    name: Persist Browser Data (Chromium only for now)
     description: Keep browser cache and session data across restarts in /data/. Useful to avoid having to log in but needs more space. 
+  browser:
+    name: Browser engine (EXPERIMENTAL)
+    description: Browser, chromium was previously the only alternative, and is the default but depending on your dashboard and setup other browsers might perform better.
 network:
   8080/TCP: The port where you will find the noVNC webpage. Use it to access the VNC view through a browser by going to <homeassistant-address>:<port> on your device.
   

@@ -8,8 +8,15 @@ ENV LANG=en_US.UTF-8 \
 	LC_ALL=C.UTF-8 \
 	TZ="UTC"
 
+ARG BUILDARCH
 RUN	apk update && \
-	apk add --no-cache tzdata ca-certificates supervisor curl chromium wget openssl bash python3 py3-requests sed unzip xvfb tigervnc websockify openbox luakit nss alsa-lib font-noto font-noto-cjk jq git procps
+	apk add --no-cache tzdata ca-certificates supervisor curl wget openssl \
+	bash python3 py3-requests sed unzip xvfb tigervnc websockify openbox \
+	luakit nss alsa-lib font-noto font-noto-cjk jq git procps firefox \
+	firefox-esr && \
+	if [ "$BUILDARCH" = "amd64" ] || [ "$BUILDARCH" = "aarch64" ]; then \
+		apk add --no-cache chromium; \
+	fi
 
 # TimeZone
 RUN	cp /usr/share/zoneinfo/$TZ /etc/localtime && \

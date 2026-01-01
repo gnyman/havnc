@@ -10,7 +10,13 @@ Very useful in case your browser don't support all the newfangled webstuff but e
 For example the iPad2.
 
 ## Usage
-Clone into your /addons/ folder (you need a way to access that, outside of the scope of this documentation currently). Refresh the addons page and install it.
+Install from my [ha-addon repository](https://github.com/gnyman/ha-addons) or manually. Note that this DRAGON build is quite big and on a PI it will take *a long time* to download and extract the first time. Have patience, enjoy a cup of hot beverage.
+
+After you have installed it, check the configuration page. Read the descriptions.
+
+Then visit http://homeassistant.local:8080?password=NOVNCPASSWORD from the same network where your HA runs. 
+
+If everything worked, you will see a gray NOVNC page and then it will load the dashboard. If something went wrong, see the log and try to figure out what went wrong. You can report issues either in the [Home Assistant forum](https://community.home-assistant.io/t/havnc-add-on-access-your-dashboards-on-older-unsupported-devices/859798/48) or as [github issues](https://github.com/gnyman/havnc/issues). 
 
 ## Tips
 [Kiosk-mode](https://github.com/NemesisRE/kiosk-mode) is really useful for a cleaner look.

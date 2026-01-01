@@ -1,6 +1,6 @@
 name: "HAVNC-DRAGONS"
 description: "VNC straight to your dashboard - here be dragons version (also known as bleeding edge, might not work)"
-version: "0.1.1"
+version: "0.1.2"
 slug: "havnc-dragons"
 init: false
 full_access: false
@@ -15,10 +15,12 @@ options:
   url: "http://homeassistant:8123"
   resolution: "768x1024"
   password: null
-  persist_data: false 
+  persist_data: false
+  browser: "luakit"
 schema:
   url: "str"
   resolution: "str"
   password: "password"
   persist_data: "bool"
+  browser: "list(chromium|firefox|firefox-esr|luakit)?"
 image: "ghcr.io/gnyman/{arch}-havnc-dragons"
