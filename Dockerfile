@@ -33,6 +33,9 @@ COPY index.html /opt/novnc/index.html
 COPY config /config
 RUN mkdir -p /root/.config/tigervnc
 
+# luakit stuff
+COPY luakit/userconf.lua /root/.config/.luakit/userconf.lua
+
 ENV VNC_TITLE="Home Assistant Dashboard" \
 #Local Display Server Port
 DISPLAY=:0 \
