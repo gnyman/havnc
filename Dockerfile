@@ -12,10 +12,9 @@ ARG BUILDARCH
 RUN	apk update && \
 	apk add --no-cache tzdata ca-certificates supervisor curl wget openssl \
 	bash python3 py3-requests sed unzip xvfb tigervnc websockify openbox \
-	luakit nss alsa-lib font-noto font-noto-cjk jq git procps firefox \
-	firefox-esr && \
+	luakit nss alsa-lib font-noto font-noto-cjk jq git procps && \
 	if [ "$BUILDARCH" = "amd64" ] || [ "$BUILDARCH" = "aarch64" ]; then \
-		apk add --no-cache chromium; \
+		apk add --no-cache chromium firefox firefox-esr; \
 	fi
 
 # TimeZone
