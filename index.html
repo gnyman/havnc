@@ -80,6 +80,10 @@
                            "jsunzip.js", "rfb.js", "keysym.js"]);
 
         var rfb;
+        var reconnectTimer = null;
+        var reconnectAttempts = 0;
+        var reconnectDelays = [2, 5, 10, 20, 30, 60]; // seconds
+        var connectionParams = {}; // Store connection parameters for reconnect
 
         function passwordRequired(rfb) {
             var msg;
@@ -111,6 +115,63 @@
             rfb.xvpReset();
             return false;
         }
+
+        function clearReconnectTimer() {
+            if (reconnectTimer !== null) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+        }
+
+        function scheduleReconnect() {
+            clearReconnectTimer();
+
+            var delayIndex = Math.min(reconnectAttempts, reconnectDelays.length - 1);
+            var delay = reconnectDelays[delayIndex];
+            reconnectAttempts++;
+
+            var countdown = delay;
+            var s = $D('noVNC_status');
+            var sb = $D('noVNC_status_bar');
+
+            function updateCountdown() {
+                if (countdown > 0) {
+                    s.innerHTML = 'Disconnected. Reconnecting in ' + countdown + ' second' + (countdown !== 1 ? 's' : '') + '... (attempt ' + reconnectAttempts + ')';
+                    sb.setAttribute("class", "noVNC_status_warn");
+                    countdown--;
+                    reconnectTimer = setTimeout(updateCountdown, 1000);
+                } else {
+                    s.innerHTML = 'Reconnecting...';
+                    sb.setAttribute("class", "noVNC_status_warn");
+                    attemptReconnect();
+                }
+            }
+
+            updateCountdown();
+        }
+
+        function attemptReconnect() {
+            clearReconnectTimer();
+            try {
+                if (rfb) {
+                    rfb.disconnect();
+                }
+                rfb = new RFB({'target':       $D('noVNC_canvas'),
+                               'encrypt':      connectionParams.encrypt,
+                               'repeaterID':   connectionParams.repeaterID,
+                               'true_color':   connectionParams.true_color,
+                               'local_cursor': connectionParams.local_cursor,
+                               'shared':       connectionParams.shared,
+                               'view_only':    connectionParams.view_only,
+                               'onUpdateState':  updateState,
+                               'onXvpInit':    xvpInit,
+                               'onPasswordRequired':  passwordRequired});
+                rfb.connect(connectionParams.host, connectionParams.port, connectionParams.password, connectionParams.path);
+            } catch (exc) {
+                scheduleReconnect();
+            }
+        }
+
         function updateState(rfb, state, oldstate, msg) {
             var s, sb, cad, level;
             s = $D('noVNC_status');
@@ -128,6 +189,9 @@
             if (state === "normal") {
                 cad.disabled = false;
 		s.parentElement.parentElement.style.display = 'none';
+                // Successfully connected - clear reconnect timer and reset attempts
+                clearReconnectTimer();
+                reconnectAttempts = 0;
             } else {
 		s.parentElement.parentElement.style.display = 'block';
                 cad.disabled = true;
@@ -137,6 +201,11 @@
             if (typeof(msg) !== 'undefined') {
                 sb.setAttribute("class", "noVNC_status_" + level);
                 s.innerHTML = msg;
+            }
+
+            // Auto-reconnect on disconnect or failure
+            if (state === 'disconnected' || state === 'failed') {
+                scheduleReconnect();
             }
         }
 
@@ -192,14 +261,27 @@
                 return;
             }
 
+            // Store connection parameters for reconnect
+            connectionParams = {
+                host: host,
+                port: port,
+                password: password,
+                path: path,
+                encrypt: WebUtil.getQueryVar('encrypt', (window.location.protocol === "https:")),
+                repeaterID: WebUtil.getQueryVar('repeaterID', ''),
+                true_color: WebUtil.getQueryVar('true_color', true),
+                local_cursor: WebUtil.getQueryVar('cursor', true),
+                shared: WebUtil.getQueryVar('shared', true),
+                view_only: WebUtil.getQueryVar('view_only', false)
+            };
+
             rfb = new RFB({'target':       $D('noVNC_canvas'),
-                           'encrypt':      WebUtil.getQueryVar('encrypt',
-                                    (window.location.protocol === "https:")),
-                           'repeaterID':   WebUtil.getQueryVar('repeaterID', ''),
-                           'true_color':   WebUtil.getQueryVar('true_color', true),
-                           'local_cursor': WebUtil.getQueryVar('cursor', true),
-                           'shared':       WebUtil.getQueryVar('shared', true),
-                           'view_only':    WebUtil.getQueryVar('view_only', false),
+                           'encrypt':      connectionParams.encrypt,
+                           'repeaterID':   connectionParams.repeaterID,
+                           'true_color':   connectionParams.true_color,
+                           'local_cursor': connectionParams.local_cursor,
+                           'shared':       connectionParams.shared,
+                           'view_only':    connectionParams.view_only,
                            'onUpdateState':  updateState,
                            'onXvpInit':    xvpInit,
                            'onPasswordRequired':  passwordRequired});
