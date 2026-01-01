@@ -25,11 +25,11 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <!-- App Start Icon  -->
-    <link rel="apple-touch-startup-image" href="images/screen_320x460.png" />
+    <link rel="apple-touch-startup-image" href="icong.png" />
     <!-- For iOS devices set the icon to use if user bookmarks app on their homescreen -->
-    <link rel="apple-touch-icon" href="images/screen_57x57.png">
+    <link rel="apple-touch-icon" href="icong.png">
     <!--
-    <link rel="apple-touch-icon-precomposed" href="images/screen_57x57.png" />
+    <link rel="apple-touch-icon-precomposed" href="icong.png" />
     -->
 
 
@@ -153,9 +153,6 @@
         function attemptReconnect() {
             clearReconnectTimer();
             try {
-                if (rfb) {
-                    rfb.disconnect();
-                }
                 rfb = new RFB({'target':       $D('noVNC_canvas'),
                                'encrypt':      connectionParams.encrypt,
                                'repeaterID':   connectionParams.repeaterID,
