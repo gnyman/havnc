@@ -327,30 +327,34 @@ function Websock() {
         },
 
         _decode_message: function (data) {
+            // Compact queue BEFORE adding new data if we're past threshold
+            // This is more important than the way we add data
+            if (this._rQi > 500 && this._rQ.length > 1000) {
+                this._rQ = this._rQ.slice(this._rQi);
+                this._rQi = 0;
+            }
+
             if (this._mode === 'binary') {
-                // push arraybuffer values onto the end more efficiently
+                // Push arraybuffer values onto the end
                 var u8 = new Uint8Array(data);
-                // Use Array.prototype.push.apply for better performance
-                // But check array size to avoid stack overflow
-                if (u8.length < 10000) {
-                    Array.prototype.push.apply(this._rQ, u8);
-                } else {
-                    for (var i = 0; i < u8.length; i++) {
-                        this._rQ.push(u8[i]);
-                    }
+                // iOS 9 Safari doesn't handle Array.prototype.push.apply with Uint8Array
+                // Use simple loop for compatibility (fast enough for most frame sizes)
+                for (var i = 0; i < u8.length; i++) {
+                    this._rQ.push(u8[i]);
                 }
             } else {
-                // base64 decode and concat to end
-                // Compact queue BEFORE adding new data if we're past threshold
-                if (this._rQi > 500 && this._rQ.length > 1000) {
-                    this._rQ = this._rQ.slice(this._rQi);
-                    this._rQi = 0;
-                }
+                // base64 decode and add to end
                 var decoded = Base64.decode(data, 0);
-                // Use Array.prototype.push.apply to avoid creating new array
-                if (decoded.length < 10000) {
-                    Array.prototype.push.apply(this._rQ, decoded);
+
+                // For iOS 9 compatibility, use simple loops for smaller messages
+                // concat() creates new array but is safer for large chunks
+                if (decoded.length < 2000) {
+                    // Small message - use loop (iOS 9 safe)
+                    for (var j = 0; j < decoded.length; j++) {
+                        this._rQ.push(decoded[j]);
+                    }
                 } else {
+                    // Large message - use concat (less frequent, acceptable memory cost)
                     this._rQ = this._rQ.concat(decoded);
                 }
             }
