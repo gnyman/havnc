@@ -22,6 +22,7 @@ RUN git clone -c http.sslVerify=false --branch $NOVNC_VERSION https://github.com
 COPY novnc-patches/include/display.js /opt/novnc/include/display.js
 COPY novnc-patches/include/rfb.js /opt/novnc/include/rfb.js
 COPY novnc-patches/include/input.js /opt/novnc/include/input.js
+COPY novnc-patches/include/websock.js /opt/novnc/include/websock.js
 
 # Wipe Temp Files
 RUN	apk del build-base curl wget unzip tzdata openssl && \

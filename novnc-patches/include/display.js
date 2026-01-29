@@ -588,6 +588,7 @@ var Display;
 
         _scan_renderQ: function () {
             var ready = true;
+            if (window.MemDebug) { window.MemDebug.updateRenderQSize(this._renderQ.length); }
             while (ready && this._renderQ.length > 0) {
                 var a = this._renderQ[0];
                 switch (a.type) {

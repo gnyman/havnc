@@ -4,7 +4,20 @@ This directory contains patched versions of noVNC v0.5.1 files to fix memory lea
 
 ## Issues Fixed
 
-### 1. Image Object Accumulation (display.js)
+### 1. **WebSocket Receive Queue Growth (websock.js) - CRITICAL**
+**Problem**: The most significant memory leak was in the WebSocket receive queue management:
+- `concat()` creates a NEW array on every message (line 338), leaving old arrays in memory
+- Queue only compacted after 10,000 bytes - way too high for constrained devices
+- Inefficient byte-by-byte pushing in binary mode causing array reallocations
+
+**Fix**:
+- Reduced `_rQmax` from 10,000 to 2,000 bytes
+- Pre-compact queue before adding new data if index exceeds 500 bytes
+- Use `Array.prototype.push.apply()` instead of `concat()` to avoid creating new arrays
+- More aggressive compaction: compact when consumed data > 30% of queue or index > 1,000
+- Added instrumentation to track buffer waste percentage
+
+### 2. Image Object Accumulation (display.js)
 **Problem**: Image objects created from base64 data URIs were not properly cleaned up after rendering, causing memory to accumulate over hours of use.
 
 **Fix**:
