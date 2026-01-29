@@ -37,6 +37,10 @@ var Display;
         // Pre-bind the scan function to avoid creating new closures
         this._boundScanRenderQ = null;
 
+        // Image object pool to reduce GC pressure on iOS 9 Safari
+        this._imagePool = [];
+        this._imagePoolMaxSize = 10;  // Keep pool small to avoid holding too many
+
         Util.set_defaults(this, defaults, {
             'true_color': true,
             'colourMap': [],
@@ -449,6 +453,28 @@ var Display;
             this._drawCtx.drawImage(img, x - this._viewportLoc.x, y - this._viewportLoc.y);
         },
 
+        // Image pool management for iOS 9 Safari memory optimization
+        getPooledImage: function () {
+            if (this._imagePool.length > 0) {
+                return this._imagePool.pop();
+            }
+            return new Image();
+        },
+
+        returnImageToPool: function (img) {
+            if (this._imagePool.length < this._imagePoolMaxSize) {
+                // Clear the src to release the data URI from memory
+                img.src = '';
+                img.onload = null;
+                img.onerror = null;
+                this._imagePool.push(img);
+            } else {
+                // Pool is full, let this image be garbage collected
+                img.src = '';
+                img = null;
+            }
+        },
+
         renderQ_push: function (action) {
             this._renderQ.push(action);
             if (this._renderQ.length === 1) {
@@ -611,8 +637,8 @@ var Display;
                     case 'img':
                         if (a.img.complete) {
                             this.drawImage(a.img, a.x, a.y);
-                            // Clear image src and reference to help GC (especially for data URIs)
-                            a.img.src = '';
+                            // Return image to pool for reuse (reduces GC pressure on iOS 9)
+                            this.returnImageToPool(a.img);
                             a.img = null;
                         } else {
                             // We need to wait for this image to 'load'

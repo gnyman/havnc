@@ -86,6 +86,16 @@
 
                     console.log('=== MemDebug Stats at ' + mins + 'm ' + secs + 's ===');
                     console.log('Images created:', this.counters.images);
+
+                    // Check if rfb and display are available to show pool stats
+                    if (window.rfbDebug && window.rfbDebug._display && window.rfbDebug._display._imagePool) {
+                        var poolSize = window.rfbDebug._display._imagePool.length;
+                        var poolMax = window.rfbDebug._display._imagePoolMaxSize;
+                        var reuseRate = this.counters.images > poolMax ?
+                            Math.round((this.counters.images - poolMax) / this.counters.images * 100) : 0;
+                        console.log('Image pool size:', poolSize, '/', poolMax, '(reuse rate: ~' + reuseRate + '%)');
+                    }
+
                     console.log('ImageData objects:', this.counters.imageDataObjects);
                     console.log('Current renderQ size:', this.counters.renderQueueSize);
                     console.log('WebSocket buffer size:', this.counters.wsBufferSize);
@@ -295,6 +305,10 @@
                            'onUpdateState':  updateState,
                            'onXvpInit':    xvpInit,
                            'onPasswordRequired':  passwordRequired});
+
+            // Expose rfb globally for debugging (allows MemDebug to access pool stats)
+            window.rfbDebug = rfb;
+
             rfb.connect(host, port, password, path);
         };
         </script>

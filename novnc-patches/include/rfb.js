@@ -1802,7 +1802,8 @@ var RFB;
 
                     // We have everything, render it
                     this._sock.rQskipBytes(1 + clength[0]);  // shift off clt + compact length
-                    var img = new Image();
+                    // Use pooled image to reduce GC pressure on iOS 9 Safari
+                    var img = this._display.getPooledImage();
                     if (window.MemDebug) { window.MemDebug.trackImage(); }
                     img.src = "data: image/" + cmode +
                         RFB.extract_data_uri(this._sock.rQshiftBytes(clength[1]));
