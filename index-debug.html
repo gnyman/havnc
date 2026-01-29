@@ -36,6 +36,53 @@
     <!-- Stylesheets -->
     <link rel="stylesheet" href="include/base.css" title="plain">
 
+    <!-- Debug overlay styles -->
+    <style>
+        #memDebugOverlay {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.85);
+            color: #0f0;
+            font-family: monospace;
+            font-size: 11px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            z-index: 9999;
+            min-width: 280px;
+            line-height: 1.4;
+        }
+        #memDebugOverlay.crashed {
+            background: rgba(139, 0, 0, 0.9);
+            color: #ff6b6b;
+        }
+        #memDebugOverlay .stat {
+            margin: 2px 0;
+        }
+        #memDebugOverlay .label {
+            display: inline-block;
+            width: 140px;
+        }
+        #memDebugOverlay .value {
+            font-weight: bold;
+        }
+        #memDebugOverlay .warning {
+            color: #ff0;
+        }
+        #memDebugOverlay .error {
+            color: #f00;
+        }
+        #memDebugOverlay .title {
+            font-weight: bold;
+            border-bottom: 1px solid #0f0;
+            margin-bottom: 4px;
+            padding-bottom: 2px;
+        }
+        #memDebugOverlay .crashed .title {
+            border-color: #ff6b6b;
+        }
+    </style>
+
      <!--
     <script type='text/javascript'
         src='http://getfirebug.com/releases/lite/1.2/firebug-lite-compressed.js'></script>
@@ -50,11 +97,17 @@
             var MemDebug = {
                 counters: {},
                 startTime: Date.now(),
+                sessionId: Date.now().toString(36),
                 logInterval: 30000, // Log every 30 seconds
+                saveInterval: 5000, // Save to localStorage every 5 seconds
                 lastLog: Date.now(),
+                overlay: null,
 
                 init: function() {
                     console.log('[MemDebug] Initialized at', new Date().toISOString());
+
+                    // Check for previous crash
+                    this.checkForCrash();
 
                     // Track object creation
                     this.counters = {
@@ -67,8 +120,23 @@
                         zlibStreams: 0
                     };
 
+                    // Create overlay
+                    this.createOverlay();
+
                     // Log memory stats periodically
                     setInterval(this.logStats.bind(this), this.logInterval);
+
+                    // Save to localStorage periodically
+                    setInterval(this.saveToStorage.bind(this), this.saveInterval);
+
+                    // Update overlay frequently
+                    setInterval(this.updateOverlay.bind(this), 2000);
+
+                    // Mark session as active
+                    localStorage.setItem('memDebug_active', this.sessionId);
+
+                    // Clean exit handler
+                    window.addEventListener('beforeunload', this.markCleanExit.bind(this));
 
                     // Try to expose performance.memory if available
                     if (window.performance && window.performance.memory) {
@@ -132,11 +200,171 @@
 
                 trackFBU: function() {
                     this.counters.totalFBUCount++;
+                },
+
+                checkForCrash: function() {
+                    var lastActive = localStorage.getItem('memDebug_active');
+                    var lastStats = localStorage.getItem('memDebug_lastStats');
+
+                    if (lastActive && lastStats) {
+                        // Previous session didn't exit cleanly - it crashed!
+                        var stats = JSON.parse(lastStats);
+                        var crashTime = new Date(stats.timestamp).toLocaleString();
+
+                        console.error('=== CRASH DETECTED ===');
+                        console.error('Last update:', crashTime);
+                        console.error('Runtime:', Math.floor(stats.runtime / 60) + 'm ' + (stats.runtime % 60) + 's');
+                        console.error('Images created:', stats.images);
+                        console.error('FBUs processed:', stats.fbus);
+                        console.error('WS buffer:', stats.wsBuffer);
+                        console.error('WS waste:', stats.wsWaste + '%');
+                        console.error('=====================');
+
+                        // Save to crash history
+                        var crashes = JSON.parse(localStorage.getItem('memDebug_crashes') || '[]');
+                        crashes.push({
+                            timestamp: stats.timestamp,
+                            runtime: stats.runtime,
+                            stats: stats
+                        });
+                        // Keep last 10 crashes
+                        if (crashes.length > 10) crashes.shift();
+                        localStorage.setItem('memDebug_crashes', JSON.stringify(crashes));
+                    }
+
+                    // Clear active flag
+                    localStorage.removeItem('memDebug_active');
+                },
+
+                createOverlay: function() {
+                    this.overlay = document.createElement('div');
+                    this.overlay.id = 'memDebugOverlay';
+
+                    // Check if we just recovered from a crash
+                    var lastActive = localStorage.getItem('memDebug_lastCrashNotified');
+                    if (!lastActive) {
+                        var crashes = JSON.parse(localStorage.getItem('memDebug_crashes') || '[]');
+                        if (crashes.length > 0) {
+                            this.overlay.className = 'crashed';
+                            localStorage.setItem('memDebug_lastCrashNotified', 'true');
+                            // Clear after first display
+                            setTimeout(function() {
+                                this.overlay.className = '';
+                                localStorage.removeItem('memDebug_lastCrashNotified');
+                            }.bind(this), 60000); // Red for 1 minute
+                        }
+                    }
+
+                    document.body.appendChild(this.overlay);
+                },
+
+                updateOverlay: function() {
+                    if (!this.overlay) return;
+
+                    var now = Date.now();
+                    var elapsed = Math.floor((now - this.startTime) / 1000);
+                    var mins = Math.floor(elapsed / 60);
+                    var secs = elapsed % 60;
+
+                    var poolSize = 0, poolMax = 0, reuseRate = 0;
+                    if (window.rfbDebug && window.rfbDebug._display && window.rfbDebug._display._imagePool) {
+                        poolSize = window.rfbDebug._display._imagePool.length;
+                        poolMax = window.rfbDebug._display._imagePoolMaxSize;
+                        reuseRate = this.counters.images > poolMax ?
+                            Math.round((this.counters.images - poolMax) / this.counters.images * 100) : 0;
+                    }
+
+                    var wsWaste = Math.round(this.counters.wsBufferIndex / Math.max(1, this.counters.wsBufferSize) * 100);
+
+                    // Highlight warnings
+                    var wsBufferClass = this.counters.wsBufferSize > 5000 ? ' error' : (this.counters.wsBufferSize > 3000 ? ' warning' : '');
+                    var imagesClass = this.counters.images > 50 ? ' warning' : '';
+                    var wsWasteClass = wsWaste > 40 ? ' warning' : '';
+
+                    var html = '<div class="title">Memory Debug [' + mins + 'm ' + secs + 's]</div>';
+                    html += '<div class="stat"><span class="label">Images created:</span><span class="value' + imagesClass + '">' + this.counters.images + '</span></div>';
+                    html += '<div class="stat"><span class="label">Pool:</span><span class="value">' + poolSize + '/' + poolMax + ' (' + reuseRate + '%)</span></div>';
+                    html += '<div class="stat"><span class="label">FBUs:</span><span class="value">' + this.counters.totalFBUCount + '</span></div>';
+                    html += '<div class="stat"><span class="label">WS buffer:</span><span class="value' + wsBufferClass + '">' + this.counters.wsBufferSize + '</span></div>';
+                    html += '<div class="stat"><span class="label">WS index:</span><span class="value">' + this.counters.wsBufferIndex + '</span></div>';
+                    html += '<div class="stat"><span class="label">WS waste:</span><span class="value' + wsWasteClass + '">' + wsWaste + '%</span></div>';
+                    html += '<div class="stat"><span class="label">RenderQ:</span><span class="value">' + this.counters.renderQueueSize + '</span></div>';
+
+                    this.overlay.innerHTML = html;
+                },
+
+                saveToStorage: function() {
+                    var now = Date.now();
+                    var elapsed = Math.floor((now - this.startTime) / 1000);
+
+                    var poolSize = 0;
+                    if (window.rfbDebug && window.rfbDebug._display && window.rfbDebug._display._imagePool) {
+                        poolSize = window.rfbDebug._display._imagePool.length;
+                    }
+
+                    var wsWaste = Math.round(this.counters.wsBufferIndex / Math.max(1, this.counters.wsBufferSize) * 100);
+
+                    var stats = {
+                        timestamp: now,
+                        runtime: elapsed,
+                        images: this.counters.images,
+                        poolSize: poolSize,
+                        fbus: this.counters.totalFBUCount,
+                        wsBuffer: this.counters.wsBufferSize,
+                        wsIndex: this.counters.wsBufferIndex,
+                        wsWaste: wsWaste,
+                        renderQ: this.counters.renderQueueSize
+                    };
+
+                    localStorage.setItem('memDebug_lastStats', JSON.stringify(stats));
+                },
+
+                markCleanExit: function() {
+                    localStorage.removeItem('memDebug_active');
+                    console.log('[MemDebug] Clean exit');
+                },
+
+                // Helper: View crash history from console
+                showCrashes: function() {
+                    var crashes = JSON.parse(localStorage.getItem('memDebug_crashes') || '[]');
+                    if (crashes.length === 0) {
+                        console.log('[MemDebug] No crashes recorded');
+                        return;
+                    }
+
+                    console.log('=== Crash History (' + crashes.length + ' crashes) ===');
+                    crashes.forEach(function(crash, idx) {
+                        var time = new Date(crash.timestamp).toLocaleString();
+                        var runtime = Math.floor(crash.runtime / 60) + 'm ' + (crash.runtime % 60) + 's';
+                        console.log('Crash #' + (idx + 1) + ' at ' + time + ' (runtime: ' + runtime + ')');
+                        console.log('  Images:', crash.stats.images, '| FBUs:', crash.stats.fbus);
+                        console.log('  WS buffer:', crash.stats.wsBuffer, '| WS waste:', crash.stats.wsWaste + '%');
+                        console.log('  RenderQ:', crash.stats.renderQ);
+                    });
+                    console.log('========================================');
+                },
+
+                // Helper: Clear crash history
+                clearCrashes: function() {
+                    localStorage.removeItem('memDebug_crashes');
+                    localStorage.removeItem('memDebug_lastCrashNotified');
+                    console.log('[MemDebug] Crash history cleared');
+                },
+
+                // Helper: Show current stats
+                showStats: function() {
+                    this.logStats();
                 }
             };
 
             window.MemDebug = MemDebug;
             MemDebug.init();
+
+            // Log available console commands
+            console.log('[MemDebug] Console commands available:');
+            console.log('  MemDebug.showCrashes() - View crash history');
+            console.log('  MemDebug.clearCrashes() - Clear crash history');
+            console.log('  MemDebug.showStats() - Show current stats');
         })();
     </script>
 
