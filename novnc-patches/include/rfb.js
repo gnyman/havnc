@@ -1187,6 +1187,7 @@ var RFB;
                 if (!ret) { return ret; }  // need more data
             }
 
+            if (window.MemDebug) { window.MemDebug.trackFBU(); }
             this._onFBUComplete(this,
                     {'x': this._FBU.x, 'y': this._FBU.y,
                      'width': this._FBU.width, 'height': this._FBU.height,
@@ -1802,6 +1803,7 @@ var RFB;
                     // We have everything, render it
                     this._sock.rQskipBytes(1 + clength[0]);  // shift off clt + compact length
                     var img = new Image();
+                    if (window.MemDebug) { window.MemDebug.trackImage(); }
                     img.src = "data: image/" + cmode +
                         RFB.extract_data_uri(this._sock.rQshiftBytes(clength[1]));
                     this._display.renderQ_push({
