@@ -327,36 +327,16 @@ function Websock() {
         },
 
         _decode_message: function (data) {
-            // Compact queue BEFORE adding new data if we're past threshold
-            // This is more important than the way we add data
-            if (this._rQi > 500 && this._rQ.length > 1000) {
-                this._rQ = this._rQ.slice(this._rQi);
-                this._rQi = 0;
-            }
-
             if (this._mode === 'binary') {
-                // Push arraybuffer values onto the end
+                // push arraybuffer values onto the end
                 var u8 = new Uint8Array(data);
-                // iOS 9 Safari doesn't handle Array.prototype.push.apply with Uint8Array
-                // Use simple loop for compatibility (fast enough for most frame sizes)
                 for (var i = 0; i < u8.length; i++) {
                     this._rQ.push(u8[i]);
                 }
             } else {
-                // base64 decode and add to end
-                var decoded = Base64.decode(data, 0);
-
-                // For iOS 9 compatibility, use simple loops for smaller messages
-                // concat() creates new array but is safer for large chunks
-                if (decoded.length < 2000) {
-                    // Small message - use loop (iOS 9 safe)
-                    for (var j = 0; j < decoded.length; j++) {
-                        this._rQ.push(decoded[j]);
-                    }
-                } else {
-                    // Large message - use concat (less frequent, acceptable memory cost)
-                    this._rQ = this._rQ.concat(decoded);
-                }
+                // base64 decode and concat to end
+                // Original approach - most compatible with iOS 9
+                this._rQ = this._rQ.concat(Base64.decode(data, 0));
             }
         },
 
@@ -369,13 +349,11 @@ function Websock() {
 
                     this._eventHandlers.message();
                     // Compact the receive queue more aggressively for memory-constrained devices
-                    // Check if we've consumed enough data or queue is too large
+                    // Original only compacted when length > _rQmax (10000)
+                    // Now compact much more frequently to prevent memory buildup
                     if (this._rQi > 1000 || this._rQ.length > this._rQmax) {
-                        // Only compact if we'll actually save significant space
-                        if (this._rQi > this._rQ.length * 0.3) {
-                            this._rQ = this._rQ.slice(this._rQi);
-                            this._rQi = 0;
-                        }
+                        this._rQ = this._rQ.slice(this._rQi);
+                        this._rQi = 0;
                     }
                 } else {
                     Util.Debug("Ignoring empty message");
