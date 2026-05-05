@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+    <!--
+    noVNC example: simple example using default UI
+    Copyright (C) 2012 Joel Martin
+    Copyright (C) 2013 Samuel Mannehed for Cendio AB
+    noVNC is licensed under the MPL 2.0 (see LICENSE.txt)
+    This file is licensed under the 2-Clause BSD license (see LICENSE.txt).
+
+    Connect parameters are provided in query string:
+        http://example.com/?host=HOST&port=PORT&encrypt=1&true_color=1
+    -->
+    <title>noVNC (Debug Build)</title>
+
+    <meta charset="utf-8">
+
+    <!-- Always force latest IE rendering engine (even in intranet) & Chrome Frame
+                Remove this if you use the .htaccess -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+
+    <!-- Apple iOS Safari settings -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- App Start Icon  -->
+    <link rel="apple-touch-startup-image" href="images/screen_320x460.png" />
+    <!-- For iOS devices set the icon to use if user bookmarks app on their homescreen -->
+    <link rel="apple-touch-icon" href="images/screen_57x57.png">
+    <!--
+    <link rel="apple-touch-icon-precomposed" href="images/screen_57x57.png" />
+    -->
+
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="include/base.css" title="plain">
+
+    <!-- Debug overlay styles -->
+    <style>
+        #memDebugOverlay {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.85);
+            color: #0f0;
+            font-family: monospace;
+            font-size: 11px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            z-index: 9999;
+            min-width: 280px;
+            line-height: 1.4;
+        }
+        #memDebugOverlay.crashed {
+            background: rgba(139, 0, 0, 0.9);
+            color: #ff6b6b;
+        }
+        #memDebugOverlay .stat {
+            margin: 2px 0;
+        }
+        #memDebugOverlay .label {
+            display: inline-block;
+            width: 140px;
+        }
+        #memDebugOverlay .value {
+            font-weight: bold;
+        }
+        #memDebugOverlay .warning {
+            color: #ff0;
+        }
+        #memDebugOverlay .error {
+            color: #f00;
+        }
+        #memDebugOverlay .title {
+            font-weight: bold;
+            border-bottom: 1px solid #0f0;
+            margin-bottom: 4px;
+            padding-bottom: 2px;
+        }
+        #memDebugOverlay .crashed .title {
+            border-color: #ff6b6b;
+        }
+    </style>
+
+     <!--
+    <script type='text/javascript'
+        src='http://getfirebug.com/releases/lite/1.2/firebug-lite-compressed.js'></script>
+    -->
+
+    <!-- Load memory debugging utility FIRST -->
+    <script>
+        // Inline memory debugger for better compatibility
+        (function() {
+            'use strict';
+
+            var MemDebug = {
+                counters: {},
+                startTime: Date.now(),
+                sessionId: Date.now().toString(36),
+                logInterval: 30000, // Log every 30 seconds
+                saveInterval: 5000, // Save to localStorage every 5 seconds
+                lastLog: Date.now(),
+                overlay: null,
+
+                init: function() {
+                    console.log('[MemDebug] Initialized at', new Date().toISOString());
+
+                    // Check for previous crash
+                    this.checkForCrash();
+
+                    // Track object creation
+                    this.counters = {
+                        images: 0,
+                        imageDataObjects: 0,
+                        renderQueueSize: 0,
+                        wsBufferSize: 0,
+                        wsBufferIndex: 0,
+                        totalFBUCount: 0,
+                        zlibStreams: 0
+                    };
+
+                    // Create overlay
+                    this.createOverlay();
+
+                    // Log memory stats periodically
+                    setInterval(this.logStats.bind(this), this.logInterval);
+
+                    // Save to localStorage periodically
+                    setInterval(this.saveToStorage.bind(this), this.saveInterval);
+
+                    // Update overlay frequently
+                    setInterval(this.updateOverlay.bind(this), 2000);
+
+                    // Mark session as active
+                    localStorage.setItem('memDebug_active', this.sessionId);
+
+                    // Clean exit handler
+                    window.addEventListener('beforeunload', this.markCleanExit.bind(this));
+
+                    // Try to expose performance.memory if available
+                    if (window.performance && window.performance.memory) {
+                        console.log('[MemDebug] performance.memory API available');
+                    } else {
+                        console.log('[MemDebug] performance.memory NOT available (normal for Safari)');
+                    }
+                },
+
+                logStats: function() {
+                    var now = Date.now();
+                    var elapsed = Math.floor((now - this.startTime) / 1000);
+                    var mins = Math.floor(elapsed / 60);
+                    var secs = elapsed % 60;
+
+                    console.log('=== MemDebug Stats at ' + mins + 'm ' + secs + 's ===');
+                    console.log('Images created:', this.counters.images);
+
+                    // Check if rfb and display are available to show pool stats
+                    if (window.rfbDebug && window.rfbDebug._display && window.rfbDebug._display._imagePool) {
+                        var poolSize = window.rfbDebug._display._imagePool.length;
+                        var poolMax = window.rfbDebug._display._imagePoolMaxSize;
+                        var reuseRate = this.counters.images > poolMax ?
+                            Math.round((this.counters.images - poolMax) / this.counters.images * 100) : 0;
+                        console.log('Image pool size:', poolSize, '/', poolMax, '(reuse rate: ~' + reuseRate + '%)');
+                    }
+
+                    console.log('ImageData objects:', this.counters.imageDataObjects);
+                    console.log('Current renderQ size:', this.counters.renderQueueSize);
+                    console.log('WebSocket buffer size:', this.counters.wsBufferSize);
+                    console.log('WebSocket buffer index:', this.counters.wsBufferIndex);
+                    console.log('WebSocket waste:', this.counters.wsBufferIndex, '/', this.counters.wsBufferSize,
+                                '=', Math.round(this.counters.wsBufferIndex / Math.max(1, this.counters.wsBufferSize) * 100) + '%');
+                    console.log('Total FBUs processed:', this.counters.totalFBUCount);
+
+                    if (window.performance && window.performance.memory) {
+                        var mem = window.performance.memory;
+                        console.log('JS Heap Size:', Math.round(mem.usedJSHeapSize / 1024 / 1024) + ' MB');
+                        console.log('JS Heap Limit:', Math.round(mem.jsHeapSizeLimit / 1024 / 1024) + ' MB');
+                    }
+
+                    console.log('==================================');
+                },
+
+                trackImage: function() {
+                    this.counters.images++;
+                },
+
+                trackImageData: function() {
+                    this.counters.imageDataObjects++;
+                },
+
+                updateRenderQSize: function(size) {
+                    this.counters.renderQueueSize = size;
+                },
+
+                updateWSBufferSize: function(size, index) {
+                    this.counters.wsBufferSize = size;
+                    this.counters.wsBufferIndex = index || 0;
+                },
+
+                trackFBU: function() {
+                    this.counters.totalFBUCount++;
+                },
+
+                checkForCrash: function() {
+                    var lastActive = localStorage.getItem('memDebug_active');
+                    var lastStats = localStorage.getItem('memDebug_lastStats');
+
+                    if (lastActive && lastStats) {
+                        // Previous session didn't exit cleanly - it crashed!
+                        var stats = JSON.parse(lastStats);
+                        var crashTime = new Date(stats.timestamp).toLocaleString();
+
+                        console.error('=== CRASH DETECTED ===');
+                        console.error('Last update:', crashTime);
+                        console.error('Runtime:', Math.floor(stats.runtime / 60) + 'm ' + (stats.runtime % 60) + 's');
+                        console.error('Images created:', stats.images);
+                        console.error('FBUs processed:', stats.fbus);
+                        console.error('WS buffer:', stats.wsBuffer);
+                        console.error('WS waste:', stats.wsWaste + '%');
+                        console.error('=====================');
+
+                        // Save to crash history
+                        var crashes = JSON.parse(localStorage.getItem('memDebug_crashes') || '[]');
+                        crashes.push({
+                            timestamp: stats.timestamp,
+                            runtime: stats.runtime,
+                            stats: stats
+                        });
+                        // Keep last 10 crashes
+                        if (crashes.length > 10) crashes.shift();
+                        localStorage.setItem('memDebug_crashes', JSON.stringify(crashes));
+                    }
+
+                    // Clear active flag
+                    localStorage.removeItem('memDebug_active');
+                },
+
+                createOverlay: function() {
+                    this.overlay = document.createElement('div');
+                    this.overlay.id = 'memDebugOverlay';
+
+                    // Check if we just recovered from a crash
+                    var lastActive = localStorage.getItem('memDebug_lastCrashNotified');
+                    if (!lastActive) {
+                        var crashes = JSON.parse(localStorage.getItem('memDebug_crashes') || '[]');
+                        if (crashes.length > 0) {
+                            this.overlay.className = 'crashed';
+                            localStorage.setItem('memDebug_lastCrashNotified', 'true');
+                            // Clear after first display
+                            setTimeout(function() {
+                                this.overlay.className = '';
+                                localStorage.removeItem('memDebug_lastCrashNotified');
+                            }.bind(this), 60000); // Red for 1 minute
+                        }
+                    }
+
+                    document.body.appendChild(this.overlay);
+                },
+
+                updateOverlay: function() {
+                    if (!this.overlay) return;
+
+                    var now = Date.now();
+                    var elapsed = Math.floor((now - this.startTime) / 1000);
+                    var mins = Math.floor(elapsed / 60);
+                    var secs = elapsed % 60;
+
+                    var poolSize = 0, poolMax = 0, reuseRate = 0;
+                    if (window.rfbDebug && window.rfbDebug._display && window.rfbDebug._display._imagePool) {
+                        poolSize = window.rfbDebug._display._imagePool.length;
+                        poolMax = window.rfbDebug._display._imagePoolMaxSize;
+                        reuseRate = this.counters.images > poolMax ?
+                            Math.round((this.counters.images - poolMax) / this.counters.images * 100) : 0;
+                    }
+
+                    var wsWaste = Math.round(this.counters.wsBufferIndex / Math.max(1, this.counters.wsBufferSize) * 100);
+
+                    // Highlight warnings
+                    var wsBufferClass = this.counters.wsBufferSize > 5000 ? ' error' : (this.counters.wsBufferSize > 3000 ? ' warning' : '');
+                    var imagesClass = this.counters.images > 50 ? ' warning' : '';
+                    var wsWasteClass = wsWaste > 40 ? ' warning' : '';
+
+                    var html = '<div class="title">Memory Debug [' + mins + 'm ' + secs + 's]</div>';
+                    html += '<div class="stat"><span class="label">Images created:</span><span class="value' + imagesClass + '">' + this.counters.images + '</span></div>';
+                    html += '<div class="stat"><span class="label">Pool:</span><span class="value">' + poolSize + '/' + poolMax + ' (' + reuseRate + '%)</span></div>';
+                    html += '<div class="stat"><span class="label">FBUs:</span><span class="value">' + this.counters.totalFBUCount + '</span></div>';
+                    html += '<div class="stat"><span class="label">WS buffer:</span><span class="value' + wsBufferClass + '">' + this.counters.wsBufferSize + '</span></div>';
+                    html += '<div class="stat"><span class="label">WS index:</span><span class="value">' + this.counters.wsBufferIndex + '</span></div>';
+                    html += '<div class="stat"><span class="label">WS waste:</span><span class="value' + wsWasteClass + '">' + wsWaste + '%</span></div>';
+                    html += '<div class="stat"><span class="label">RenderQ:</span><span class="value">' + this.counters.renderQueueSize + '</span></div>';
+
+                    this.overlay.innerHTML = html;
+                },
+
+                saveToStorage: function() {
+                    var now = Date.now();
+                    var elapsed = Math.floor((now - this.startTime) / 1000);
+
+                    var poolSize = 0;
+                    if (window.rfbDebug && window.rfbDebug._display && window.rfbDebug._display._imagePool) {
+                        poolSize = window.rfbDebug._display._imagePool.length;
+                    }
+
+                    var wsWaste = Math.round(this.counters.wsBufferIndex / Math.max(1, this.counters.wsBufferSize) * 100);
+
+                    var stats = {
+                        timestamp: now,
+                        runtime: elapsed,
+                        images: this.counters.images,
+                        poolSize: poolSize,
+                        fbus: this.counters.totalFBUCount,
+                        wsBuffer: this.counters.wsBufferSize,
+                        wsIndex: this.counters.wsBufferIndex,
+                        wsWaste: wsWaste,
+                        renderQ: this.counters.renderQueueSize
+                    };
+
+                    localStorage.setItem('memDebug_lastStats', JSON.stringify(stats));
+                },
+
+                markCleanExit: function() {
+                    localStorage.removeItem('memDebug_active');
+                    console.log('[MemDebug] Clean exit');
+                },
+
+                // Helper: View crash history from console
+                showCrashes: function() {
+                    var crashes = JSON.parse(localStorage.getItem('memDebug_crashes') || '[]');
+                    if (crashes.length === 0) {
+                        console.log('[MemDebug] No crashes recorded');
+                        return;
+                    }
+
+                    console.log('=== Crash History (' + crashes.length + ' crashes) ===');
+                    crashes.forEach(function(crash, idx) {
+                        var time = new Date(crash.timestamp).toLocaleString();
+                        var runtime = Math.floor(crash.runtime / 60) + 'm ' + (crash.runtime % 60) + 's';
+                        console.log('Crash #' + (idx + 1) + ' at ' + time + ' (runtime: ' + runtime + ')');
+                        console.log('  Images:', crash.stats.images, '| FBUs:', crash.stats.fbus);
+                        console.log('  WS buffer:', crash.stats.wsBuffer, '| WS waste:', crash.stats.wsWaste + '%');
+                        console.log('  RenderQ:', crash.stats.renderQ);
+                    });
+                    console.log('========================================');
+                },
+
+                // Helper: Clear crash history
+                clearCrashes: function() {
+                    localStorage.removeItem('memDebug_crashes');
+                    localStorage.removeItem('memDebug_lastCrashNotified');
+                    console.log('[MemDebug] Crash history cleared');
+                },
+
+                // Helper: Show current stats
+                showStats: function() {
+                    this.logStats();
+                }
+            };
+
+            window.MemDebug = MemDebug;
+            MemDebug.init();
+
+            // Log available console commands
+            console.log('[MemDebug] Console commands available:');
+            console.log('  MemDebug.showCrashes() - View crash history');
+            console.log('  MemDebug.clearCrashes() - Clear crash history');
+            console.log('  MemDebug.showStats() - Show current stats');
+        })();
+    </script>
+
+    <script src="include/util.js"></script>
+</head>
+
+<body style="margin: 0px;">
+    <div id="noVNC_screen">
+            <div id="noVNC_status_bar" class="noVNC_status_bar" style="margin-top: 0px;">
+                <table border=0 width="100%"><tr>
+                    <td><div id="noVNC_status" style="position: relative; height: auto;">
+                        Loading (DEBUG BUILD)
+                    </div></td>
+                    <td width="1%"><div id="noVNC_buttons">
+                        <input type=button value="Send CtrlAltDel"
+                            id="sendCtrlAltDelButton">
+                        <span id="noVNC_xvp_buttons">
+                        <input type=button value="Shutdown"
+                            id="xvpShutdownButton">
+                        <input type=button value="Reboot"
+                            id="xvpRebootButton">
+                        <input type=button value="Reset"
+                            id="xvpResetButton">
+                        </span>
+                            </div></td>
+                </tr></table>
+            </div>
+            <canvas id="noVNC_canvas" width="640px" height="20px">
+                Canvas not supported.
+            </canvas>
+        </div>
+
+        <script>
+        /*jslint white: false */
+        /*global window, $, Util, RFB, MemDebug */
+        "use strict";
+
+        // Load supporting scripts
+        Util.load_scripts(["webutil.js", "base64.js", "websock.js", "des.js",
+                           "keysymdef.js", "keyboard.js", "input.js", "display.js",
+                           "jsunzip.js", "rfb.js", "keysym.js"]);
+
+        var rfb;
+
+        function passwordRequired(rfb) {
+            var msg;
+            msg = '<form onsubmit="return setPassword();"';
+            msg += '  style="margin-bottom: 0px">';
+            msg += 'Password Required: ';
+            msg += '<input type=password size=10 id="password_input" class="noVNC_status">';
+            msg += '<\/form>';
+            $D('noVNC_status_bar').setAttribute("class", "noVNC_status_warn");
+            $D('noVNC_status').innerHTML = msg;
+        }
+        function setPassword() {
+            rfb.sendPassword($D('password_input').value);
+            return false;
+        }
+        function sendCtrlAltDel() {
+            rfb.sendCtrlAltDel();
+            return false;
+        }
+        function xvpShutdown() {
+            rfb.xvpShutdown();
+            return false;
+        }
+        function xvpReboot() {
+            rfb.xvpReboot();
+            return false;
+        }
+        function xvpReset() {
+            rfb.xvpReset();
+            return false;
+        }
+        function updateState(rfb, state, oldstate, msg) {
+            var s, sb, cad, level;
+            s = $D('noVNC_status');
+            sb = $D('noVNC_status_bar');
+            cad = $D('sendCtrlAltDelButton');
+            switch (state) {
+                case 'failed':       level = "error";  break;
+                case 'fatal':        level = "error";  break;
+                case 'normal':       level = "normal"; break;
+                case 'disconnected': level = "normal"; break;
+                case 'loaded':       level = "normal"; break;
+                default:             level = "warn";   break;
+            }
+
+            if (state === "normal") {
+                cad.disabled = false;
+		s.parentElement.parentElement.style.display = 'none';
+            } else {
+		s.parentElement.parentElement.style.display = 'block';
+                cad.disabled = true;
+                xvpInit(0);
+            }
+
+            if (typeof(msg) !== 'undefined') {
+                sb.setAttribute("class", "noVNC_status_" + level);
+                s.innerHTML = msg;
+            }
+        }
+
+        function xvpInit(ver) {
+            var xvpbuttons;
+            xvpbuttons = $D('noVNC_xvp_buttons');
+            if (ver >= 1) {
+                xvpbuttons.style.display = 'inline';
+            } else {
+                xvpbuttons.style.display = 'none';
+            }
+        }
+
+        window.onscriptsload = function () {
+            var host, port, password, path, token;
+
+            console.log('[MemDebug] Scripts loaded, initializing RFB');
+
+            $D('sendCtrlAltDelButton').style.display = "inline";
+            $D('sendCtrlAltDelButton').onclick = sendCtrlAltDel;
+            $D('xvpShutdownButton').onclick = xvpShutdown;
+            $D('xvpRebootButton').onclick = xvpReboot;
+            $D('xvpResetButton').onclick = xvpReset;
+
+            WebUtil.init_logging(WebUtil.getQueryVar('logging', 'warn'));
+            document.title = unescape(WebUtil.getQueryVar('title', 'noVNC'));
+            // By default, use the host and port of server that served this file
+            host = WebUtil.getQueryVar('host', window.location.hostname);
+            port = WebUtil.getQueryVar('port', window.location.port);
+
+            // if port == 80 (or 443) then it won't be present and should be
+            // set manually
+            if (!port) {
+                if (window.location.protocol.substring(0,5) == 'https') {
+                    port = 443;
+                }
+                else if (window.location.protocol.substring(0,4) == 'http') {
+                    port = 80;
+                }
+            }
+
+            // If a token variable is passed in, set the parameter in a cookie.
+            // This is used by nova-novncproxy.
+            token = WebUtil.getQueryVar('token', null);
+            if (token) {
+                WebUtil.createCookie('token', token, 1)
+            }
+
+            password = WebUtil.getQueryVar('password', '');
+            path = WebUtil.getQueryVar('path', 'websockify');
+
+            if ((!host) || (!port)) {
+                updateState('failed',
+                    "Must specify host and port in URL");
+                return;
+            }
+
+            rfb = new RFB({'target':       $D('noVNC_canvas'),
+                           'encrypt':      WebUtil.getQueryVar('encrypt',
+                                    (window.location.protocol === "https:")),
+                           'repeaterID':   WebUtil.getQueryVar('repeaterID', ''),
+                           'true_color':   WebUtil.getQueryVar('true_color', true),
+                           'local_cursor': WebUtil.getQueryVar('cursor', true),
+                           'shared':       WebUtil.getQueryVar('shared', true),
+                           'view_only':    WebUtil.getQueryVar('view_only', false),
+                           'onUpdateState':  updateState,
+                           'onXvpInit':    xvpInit,
+                           'onPasswordRequired':  passwordRequired});
+
+            // Expose rfb globally for debugging (allows MemDebug to access pool stats)
+            window.rfbDebug = rfb;
+
+            rfb.connect(host, port, password, path);
+        };
+        </script>
+
+    </body>
+</html>

@@ -18,6 +18,12 @@ RUN	cp /usr/share/zoneinfo/$TZ /etc/localtime && \
 ARG NOVNC_VERSION=v0.5.1
 RUN git clone -c http.sslVerify=false --branch $NOVNC_VERSION https://github.com/novnc/noVNC.git /opt/novnc
 
+# Copy patched noVNC files to fix memory leaks on iOS 9
+COPY novnc-patches/include/display.js /opt/novnc/include/display.js
+COPY novnc-patches/include/rfb.js /opt/novnc/include/rfb.js
+COPY novnc-patches/include/input.js /opt/novnc/include/input.js
+COPY novnc-patches/include/websock.js /opt/novnc/include/websock.js
+
 # Wipe Temp Files
 RUN	apk del build-base curl wget unzip tzdata openssl && \
 	rm -rf /var/cache/apk/* /tmp/*
