@@ -18,6 +18,14 @@ Then visit http://homeassistant.local:8080?password=NOVNCPASSWORD from the same 
 
 If everything worked, you will see a gray NOVNC page and then it will load the dashboard. If something went wrong, see the log and try to figure out what went wrong. You can report issues either in the [Home Assistant forum](https://community.home-assistant.io/t/havnc-add-on-access-your-dashboards-on-older-unsupported-devices/859798/48) or as [github issues](https://github.com/gnyman/havnc/issues). 
 
+## Remembering browser logins
+
+Enable `persist_data` in the add-on configuration to keep browser cookies, local
+storage, and profile data across add-on restarts and upgrades. When it is
+disabled (the default), browser data is intentionally temporary and you may
+need to log in again after a restart. The persistent profile is stored in the
+add-on's `/data/browser-data` directory.
+
 ## Tips
 [Kiosk-mode](https://github.com/NemesisRE/kiosk-mode) is really useful for a cleaner look.
 

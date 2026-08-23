@@ -6,6 +6,8 @@ Notable and less notable changes.
 
 - Updated the base image from Alpine 3.19 to Alpine 3.24.
 - Updated the renamed `procps-ng` runtime dependency.
+- Fixed `persist_data` so Luakit, Chromium, Firefox, and Firefox ESR keep cookies
+  and profile data in `/data` when enabled.
 
 ## [0.1.2-DRAGON]
 
