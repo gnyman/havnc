@@ -1,4 +1,4 @@
-FROM alpine:3.19
+FROM alpine:3.24
 
 LABEL AboutImage "Home Assistant Dashboard trough VNC"
 
@@ -12,7 +12,7 @@ ARG TARGETARCH
 RUN	apk update && \
 	apk add --no-cache tzdata ca-certificates supervisor curl wget openssl \
 	bash python3 py3-requests sed unzip xvfb tigervnc websockify openbox \
-	luakit nss alsa-lib font-noto font-noto-cjk jq git procps && \
+	luakit nss alsa-lib font-noto font-noto-cjk jq git procps-ng && \
 	if [ "$TARGETARCH" = "amd64" ] || [ "$TARGETARCH" = "arm64" ]; then \
 		apk add --no-cache chromium firefox firefox-esr; \
 	fi

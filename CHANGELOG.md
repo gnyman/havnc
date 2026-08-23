@@ -2,6 +2,11 @@
 
 Notable and less notable changes. 
 
+## [0.1.3-DRAGON]
+
+- Updated the base image from Alpine 3.19 to Alpine 3.24.
+- Updated the renamed `procps-ng` runtime dependency.
+
 ## [0.1.2-DRAGON]
 
 Added more browser choices and made them selectable from the configuration page. From my testing firefox sometimes performs better than chrome, but it depends on what the dashboard does. Now you can test.

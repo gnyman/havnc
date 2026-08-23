@@ -1,6 +1,6 @@
 name: "HAVNC-DRAGONS"
 description: "VNC straight to your dashboard - here be dragons version (also known as bleeding edge, might not work)"
-version: "0.1.2"
+version: "0.1.3"
 slug: "havnc-dragons"
 init: false
 full_access: false
